@@ -29,8 +29,7 @@ def main(argv):
 
     NADIRLIMIT = -88.0   # If Gimbal Pitch is < NADIRLIMIT then the image is consider Nadir else Oblique
     nadir_or_oblique = 'A' # N - Nadir only, O - Oblique only, A - Any
-    debug = False
-    info = True
+
     min_altitude = 00.0       # I'm only interested in this range of altitudes
     max_altitude = 10000.0
 
@@ -73,12 +72,6 @@ def main(argv):
             min_altitude = max_altitude
             max_altitude = swap
         
-    debug = args.debug 
-    info = args.info
-
-    
-    # sys.exit(0)  
-    
     try:
         logfile_path = os.path.join(output_folder, "LOGFILE.txt")
         logfile = open(logfile_path, 'w')
@@ -91,18 +84,16 @@ def main(argv):
     root_folder = input_folder    
     found_images = False
     
+    if args.debug == True:
+        print("Debug flag : {}, Info flag : {}".format(args.debug, args.info))
+        print("Type of images required: {}".format(args.type))
+        print("Min altitude : {}, Max altitude : {}".format(min_altitude, max_altitude))
+        
     for input_folder, dir_names, filenames in os.walk(root_folder):
         img_contents = [s for s in os.listdir(input_folder) if s.endswith('.JPG') or s.endswith('.jpg')] # Only pick .JPG or .jpg
-        
-        if debug == True:
-            print("Debug flag : {}, Info flag : {}".format(args.debug, args.info))
-            print("Type of images required: {}".format(args.type))
-            print("Min altitude : {}, Max altitude : {}".format(min_altitude, max_altitude))
-            print(str(img_contents))
-        
+               
         if img_contents != []:
             found_images = True
-            
             
         # print(img_contents)
 
@@ -116,7 +107,7 @@ def main(argv):
             #======================
             xmp_string = get_xmp_as_xml_string(imagename)
             
-            if debug == True:
+            if args.debug == True:
                 logfile.write(xmp_string + '\n')    
                 
             # exiftree = ET.fromstring(xmp_string)
@@ -175,7 +166,7 @@ def main(argv):
                 if not(min_altitude < altitude < max_altitude):
                     continue
                 
-                if info == True:
+                if args.info == True:
                     logfile.write(imagename + ",")
                     if is_nadir == True:               # Write Image name and whether Nadir (N) or Oblique (O)
                         logfile.write('N')
@@ -187,7 +178,7 @@ def main(argv):
                     logfile.write(str(long_in_degrees)+',')
                     logfile.write(str(altitude)+'\n')
                 
-                if debug == True:
+                if args.debug == True:
                     logfile.write(str(gps_all) + '\n')
                     logfile.write(xmp_string + '\n')    
                 
