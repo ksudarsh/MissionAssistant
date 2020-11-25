@@ -8,7 +8,11 @@ import simplekml
 import argparse
 import sys, getopt
 
+NADIRLIMIT = -88.0   # If Gimbal Pitch is < NADIRLIMIT then the image is consider Nadir else Oblique
+min_altitude = 00.0       # I'm only interested in this range of altitudes
+max_altitude = 10000.0
 
+ 
 def convert_to_degrees(value):
     d0 = value[0]
     m0 = value[1]
@@ -26,15 +30,9 @@ def get_xmp_as_xml_string(image_path):
     return None    
 
 def main(argv):
-
-    NADIRLIMIT = -88.0   # If Gimbal Pitch is < NADIRLIMIT then the image is consider Nadir else Oblique
-    nadir_or_oblique = 'A' # N - Nadir only, O - Oblique only, A - Any
-
-    min_altitude = 00.0       # I'm only interested in this range of altitudes
-    max_altitude = 10000.0
-
-    # inputfolder = r"Z:\Temp\Image Processing\NY Trolley\Panorama"
-    # inputfolder = (input("Enter folder name: "))
+    global NADIRLIMIT, min_altitude, max_altitude
+    logfile = None
+    kml = None
     
     parser = argparse.ArgumentParser("MissionAssistant:", description="Mission Assistant: Inspect drone images on site to detect problems",
                                     epilog="Usage Example: MissionAssistant.exe -i -t N -a 1.0 100.0 D:\DCIM E:\OUTPUT")
@@ -50,19 +48,13 @@ def main(argv):
         sys.exit(1)
     args = parser.parse_args()
 
-    # print("Input Folder: {}, Output Folder: {}".format(args.infolder, args.outfolder))
     input_folder = args.infolder
     output_folder = args.outfolder
 
-    # print('Input folder is : ', inputfolder)
     if output_folder == None:
-        # print("Null outputfolder")
         output_folder = input_folder
-    # print('Output folder is : {}'.format(outputfolder))
-
+    
     nadir_or_oblique = args.type
-
-    # print("Altitude: ", args.alt)
 
     if args.alt != None:
         min_altitude = args.alt[0]
@@ -71,15 +63,15 @@ def main(argv):
             swap = min_altitude
             min_altitude = max_altitude
             max_altitude = swap
-        
-    try:
-        logfile_path = os.path.join(output_folder, "LOGFILE.txt")
-        logfile = open(logfile_path, 'w')
-        # logfile.write("HELLO " + logfile + '\n')
-        kml = simplekml.Kml()
-    except:
-        print("No idea what happened. Do you have permission?")
-        exit(0)
+    
+    if args.info == True:    
+        try:
+            logfile_path = os.path.join(output_folder, "LOGFILE.txt")
+            logfile = open(logfile_path, 'w')
+            kml = simplekml.Kml()
+        except:
+            print("No idea what happened. Do you have permission?")
+            exit(0)
     
     root_folder = input_folder    
     found_images = False
@@ -95,12 +87,8 @@ def main(argv):
         if img_contents != []:
             found_images = True
             
-        # print(img_contents)
-
         for image in img_contents:
-
             imagename = os.path.join(input_folder, image)
-            # print(full_path)
             
             is_nadir = False
             
@@ -110,19 +98,13 @@ def main(argv):
             if args.debug == True:
                 logfile.write(xmp_string + '\n')    
                 
-            # exiftree = ET.fromstring(xmp_string)
-            
             e = ET.ElementTree(ET.fromstring(xmp_string))
             for elt in e.iter():
                 if elt.tag == "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description":
                     if float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree']) < NADIRLIMIT:
-                        # print("Nadir Image Found")
                         is_nadir = True
-                    # else:
-                        # print("Not Nadir Image")
             #========================
     
-                
             if nadir_or_oblique == 'N':
                 if is_nadir == False:
                     continue
@@ -134,15 +116,9 @@ def main(argv):
             try:
                 pil_img = Image.open(imagename)
                 exif = {ExifTags.TAGS[k]: v for k, v in pil_img._getexif().items() if k in ExifTags.TAGS}
-                # logfile.write(imagename + '\n')
-                # logfile.write(str(exif))
-                # quit()
+                
                 for key in exif['GPSInfo'].keys():
-                # for key in exif.keys():
-                    #print("This is the code value {}".format(key))
                     decoded_value = ExifTags.GPSTAGS.get(key)
-                    # logfile.write("This is its associated label/name {}".format(decoded_value) + '\n')
-                    # logfile.write("name {} : value {} \n".format(str(key), str(decoded_value)))
                     gps_all[decoded_value] = exif['GPSInfo'][key]
                 
                     
@@ -157,7 +133,6 @@ def main(argv):
                 else:
                     long_in_degrees = convert_to_degrees(longitude)
                     
-                
                 if lat_ref == "S":
                     lat_in_degrees = -abs(convert_to_degrees(latitude))
                 else:
@@ -188,10 +163,6 @@ def main(argv):
             except:
                 print("This image file ({}) has no GPS info ".format(image))
                 pass
-
-            #for k, v in pil_img._getexif().items():
-            #    print("This is the key {}".format(k))
-            #    print("This is the value {}".format(v))
 
     if found_images == False:
         print("Couldn't find anything to process!!")

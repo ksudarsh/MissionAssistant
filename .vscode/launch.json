@@ -12,6 +12,8 @@
             "console": "integratedTerminal",
             "args":[
                 "-i",
+                "-t",
+                "N",
                 "D:\\Downloads\\Down\\DCIM",
                 "Z:\\CODING\\"
             ]
