@@ -1,18 +1,24 @@
 #!/user/bin/python
 
 import os
+import math
 from os import write
 from PIL import Image, ExifTags
 import xml.etree.ElementTree as ET
-import simplekml
+from simplekml import Kml, Style
 import argparse
 import sys, getopt
 
 NADIRLIMIT = -88.0   # If Gimbal Pitch is < NADIRLIMIT then the image is consider Nadir else Oblique
 min_altitude = 00.0       # I'm only interested in this range of altitudes
 max_altitude = 10000.0
+cardinals = 36       # Map angle to nearest cardinal direction (specify 4, 8, 12, 18, 36)
 
- 
+# Map (0, 360) => range(cardinals)
+def degrees_to_cardinals(degrees, cardinals):
+    correction = 360.0 / (2.0 * cardinals)
+    return math.floor((float((degrees + correction + 360) % 360.0)/360.0) * float(cardinals))
+
 def convert_to_degrees(value):
     d0 = value[0]
     m0 = value[1]
@@ -30,7 +36,7 @@ def get_xmp_as_xml_string(image_path):
     return None    
 
 def main(argv):
-    global NADIRLIMIT, min_altitude, max_altitude
+    global NADIRLIMIT, min_altitude, max_altitude, cardinals
     logfile = None
     kml = None
     
@@ -64,14 +70,29 @@ def main(argv):
             min_altitude = max_altitude
             max_altitude = swap
     
-    if args.info == True:    
-        try:
+    
+    # Dictionary of styles for oblique images - one for each cardinal direction
+    style_dict = {}
+    for i in range(cardinals):
+        style_dict[i] = Style()
+        style_dict[i].iconstyle.icon.href = 'https://earth.google.com/images/kml-icons/track-directional/track-0.png'
+        style_dict[i].iconstyle.heading = i * 360.0/float(cardinals)
+    
+    # Style for nadir images
+    shared_nadir_style = Style()
+    shared_nadir_style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png'
+    shared_nadir_style.labelstyle.color = 'ff0000ff'  # Red
+    
+    try:
+        if args.info == True or args.debug == True:    
             logfile_path = os.path.join(output_folder, "LOGFILE.txt")
             logfile = open(logfile_path, 'w')
-            kml = simplekml.Kml()
-        except:
-            print("No idea what happened. Do you have permission?")
-            exit(0)
+        kml = Kml()
+        folder = kml.newfolder(name='VIMANA')
+        # sharedstyle.labelstyle.color = "ff0000ff"  # Red
+    except:
+        print("No idea what happened. Do you have permission?")
+        exit(0)
     
     root_folder = input_folder    
     found_images = False
@@ -103,6 +124,8 @@ def main(argv):
                 if elt.tag == "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description":
                     if float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree']) < NADIRLIMIT:
                         is_nadir = True
+                    else:
+                        camera_yaw = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalYawDegree'])
             #========================
     
             if nadir_or_oblique == 'N':
@@ -157,10 +180,17 @@ def main(argv):
                     logfile.write(str(gps_all) + '\n')
                     logfile.write(xmp_string + '\n')    
                 
-    
-                kml.newpoint(coords=[(long_in_degrees, lat_in_degrees)])
+                pnt = folder.newpoint(name="{0}".format(altitude), coords=[(long_in_degrees, lat_in_degrees)])
+                if is_nadir == True:
+                    pnt.style = shared_nadir_style
+                else:
+                    pnt.style = style_dict[degrees_to_cardinals(camera_yaw, cardinals)] # Assign a predefined style
+                    # pnt.style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png'
+                    # pnt.style.iconstyle.icon.href = 'https://earth.google.com/images/kml-icons/track-directional/track-0.png'
+                    # pnt.style.iconstyle.heading = camera_yaw   # The KML becomes humungous when each point has its personal style
             
-            except:
+            except Exception as e:
+                print(e)
                 print("This image file ({}) has no GPS info ".format(image))
                 pass
 

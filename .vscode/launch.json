@@ -11,10 +11,12 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args":[
-                "-i",
                 "-t",
-                "N",
-                "D:\\Downloads\\Down\\DCIM",
+                "O",
+                "-a",
+                "181.9",
+                "183.1",
+                "Z:\\Temp\\Image Processing\\East Fishkill",
                 "Z:\\CODING\\"
             ]
         }
