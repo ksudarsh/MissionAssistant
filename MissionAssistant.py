@@ -39,6 +39,7 @@ def main(argv):
     global NADIRLIMIT, min_altitude, max_altitude, cardinals
     logfile = None
     kml = None
+    camera_yaw = None
     
     parser = argparse.ArgumentParser("MissionAssistant:", description="Mission Assistant: Inspect drone images on site to detect problems",
                                     epilog="Usage Example: MissionAssistant.exe -i -t N -a 1.0 100.0 D:\DCIM E:\OUTPUT")
