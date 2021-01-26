@@ -15,19 +15,20 @@ min_altitude = 00.0       # I'm only interested in this range of altitudes
 max_altitude = 10000.0
 cardinals = 36       # Map angle to nearest cardinal direction (specify 4, 8, 12, 18, 36)
 
-# Map (0, 360) => range(cardinals)
 def degrees_to_cardinals(degrees, cardinals):
+    """Returns a cardinal value for an angle [0, 360] => [0, cardinals-1]. Applies correction to angle."""
     correction = 360.0 / (2.0 * cardinals)
     return math.floor((float((degrees + correction + 360) % 360.0)/360.0) * float(cardinals))
 
 def convert_to_degrees(value):
+    """Returns float angle when given a list of [degrees, minutes, seconds]"""
     d0 = value[0]
     m0 = value[1]
-    s0 = value[2]
-    
+    s0 = value[2]  
     return float(d0) + (float(m0)/60.0) + (float(s0)/3600.0)
 
 def get_xmp_as_xml_string(image_path):
+    """Return extended metadata of JPG image. E.g. Yaw, Pitch, Roll is available here"""
     with Image.open(image_path) as im:
         for segment,content in im.applist:
             if segment == 'APP1' and b"<x:xmpmeta" in content:
@@ -47,7 +48,7 @@ def main(argv):
     parser.add_argument("-a", "--alt", nargs=2, type=float, help="Specify min followed by max altitude. Only images in this range are considered.")
     parser.add_argument("-d", "--debug", action='store_true', help="Debug option. Collects extra information in log file for debugging purposes.")
     parser.add_argument("-i", "--info", action='store_true', help="Inspect option. Writes image information to log file for informational purposes.")
-    parser.add_argument("infolder", help="Input folder with JPG images. Even subfolders are searched for JPG files.")
+    parser.add_argument("infolder", help="Input folder with JPG images. All subfolders are also searched for JPG files.")
     parser.add_argument("outfolder", nargs='?', help="KML output is written to this folder. If not specified, it is written to input folder.")
 
     if len(sys.argv)==1:
