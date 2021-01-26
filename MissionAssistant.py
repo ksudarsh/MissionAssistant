@@ -2,8 +2,9 @@
 
 import os
 import math
+import logging
 from os import write
-from PIL import Image, ExifTags
+from PIL import Image, ExifTags, UnidentifiedImageError
 import xml.etree.ElementTree as ET
 from simplekml import Kml, Style
 import argparse
@@ -33,11 +34,10 @@ def get_xmp_as_xml_string(image_path):
                 start = content.index(b"<x:xmpmeta")
                 end = content.index(b"</x:xmpmeta>") + len(b"</x:xmpmeta>")
                 return content[start:end].decode()
-    return None    
+    return None
 
 def main(argv):
     global NADIRLIMIT, min_altitude, max_altitude, cardinals
-    logfile = None
     kml = None
     camera_yaw = None
     
@@ -85,9 +85,15 @@ def main(argv):
     shared_nadir_style.labelstyle.color = 'ff0000ff'  # Red
     
     try:
-        if args.info == True or args.debug == True:    
-            logfile_path = os.path.join(output_folder, "LOGFILE.txt")
-            logfile = open(logfile_path, 'w')
+        logfile_path = os.path.join(output_folder, "LOGFILE.txt")
+        logging.basicConfig(filename = logfile_path, filemode = 'w')
+        
+        if args.info == True:   
+            logging.getLogger().setLevel(logging.INFO)
+        if args.debug == True:
+            logging.getLogger().setLevel(logging.DEBUG)
+            
+        logger = logging.getLogger()
         kml = Kml()
         folder = kml.newfolder(name='VIMANA')
         # sharedstyle.labelstyle.color = "ff0000ff"  # Red
@@ -114,11 +120,13 @@ def main(argv):
             
             is_nadir = False
             
-            #======================
-            xmp_string = get_xmp_as_xml_string(imagename)
-            
-            if args.debug == True:
-                logfile.write(xmp_string + '\n')    
+            try:
+                xmp_string = get_xmp_as_xml_string(imagename)
+            except UnidentifiedImageError:
+                print("Unable to inspect {}".format(imagename))
+                exit(0)
+                
+            logger.debug(xmp_string + '\n')   
                 
             e = ET.ElementTree(ET.fromstring(xmp_string))
             for elt in e.iter():
@@ -165,21 +173,18 @@ def main(argv):
                 if not(min_altitude < altitude < max_altitude):
                     continue
                 
-                if args.info == True:
-                    logfile.write(imagename + ",")
-                    if is_nadir == True:               # Write Image name and whether Nadir (N) or Oblique (O)
-                        logfile.write('N')
-                    else:
-                        logfile.write('O')
-                    logfile.write(',')
-                    
-                    logfile.write(str(lat_in_degrees)+',') 
-                    logfile.write(str(long_in_degrees)+',')
-                    logfile.write(str(altitude)+'\n')
+                # Append image details into this string and dump into log file as a single CSV string
+                img_details = imagename + ","
                 
-                if args.debug == True:
-                    logfile.write(str(gps_all) + '\n')
-                    logfile.write(xmp_string + '\n')    
+                if is_nadir == True:               # Write Image name and whether Nadir (N) or Oblique (O)
+                    img_details += 'N'
+                else:
+                    img_details += 'O'
+                
+                logger.info(img_details + ',' + str(lat_in_degrees) + ',' + str(long_in_degrees) + ',' + str(altitude))
+                
+                logger.debug(str(gps_all) + '\n')
+                logger.debug(xmp_string + '\n')    
                 
                 pnt = folder.newpoint(name="{0}".format(altitude), coords=[(long_in_degrees, lat_in_degrees)])
                 if is_nadir == True:
