@@ -123,19 +123,29 @@ def main(argv):
             
             try:
                 xmp_string = get_xmp_as_xml_string(imagename)
+                if xmp_string is None:
+                    print("Unable to inspect {}".format(imagename))
+                    logger.debug("Unable to inspect {}".format(imagename))
+                    continue
             except UnidentifiedImageError:
                 print("Unable to inspect {}".format(imagename))
-                exit(0)
-                
+                logger.debug("Unable to inspect {}".format(imagename))
+                continue
+                             
             logger.debug(xmp_string + '\n')   
                 
             e = ET.ElementTree(ET.fromstring(xmp_string))
             for elt in e.iter():
                 if elt.tag == "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description":
-                    if float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree']) < NADIRLIMIT:
-                        is_nadir = True
-                    else:
-                        camera_yaw = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalYawDegree'])
+                    try:
+                        if float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree']) < NADIRLIMIT:
+                            is_nadir = True
+                        else:
+                            camera_yaw = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalYawDegree'])
+                    except KeyError:
+                        print("Unsupported image format {}".format(imagename))
+                        logger.debug("Unsupported image format {}".format(imagename))
+                        continue
             #========================
     
             if nadir_or_oblique == 'N':
