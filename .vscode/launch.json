@@ -12,10 +12,10 @@
             "console": "integratedTerminal",
             "args":[
                 "-t",
-                "O",
+                "N",
                 "-a",
-                "190",
-                "194",
+                "10",
+                "1940",
                 "Z:\\Temp\\Image Processing\\East Fishkill\\DCIM",
                 "Z:\\Temp/Image Processing\\East Fishkill\\DCIM"
                 //"Z:\\Ubuntu\\shared\\UB\\down\\down\\WORK\\NUTLEY\\DCIM\\INSPECTION",
