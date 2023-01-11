@@ -6,9 +6,10 @@ import logging
 from os import write
 from PIL import Image, ExifTags, UnidentifiedImageError
 import xml.etree.ElementTree as ET
-from simplekml import Kml, Style
+from simplekml import Kml, Style, Polygon
 import argparse
 import sys, getopt
+from scipy.spatial import ConvexHull
 
 NADIRLIMIT = -88.0   # If Gimbal Pitch is < NADIRLIMIT then the image is consider Nadir else Oblique
 min_altitude = 00.0       # I'm only interested in this range of altitudes
@@ -38,7 +39,7 @@ def get_xmp_as_xml_string(image_path):
     return None
 
 def get_args():
-    parser = argparse.ArgumentParser("MissionAssistant:", description="Mission Assistant: Inspect drone images on site to detect problems",
+    parser = argparse.ArgumentParser("MissionAssistant:", description="Mission Assistant: Inspect drone images on site to detect problems. It also generates a KML polygon of site boundary based on images chosen.",
                                     epilog="Usage Example: MissionAssistant.exe -i -t N -a 1.0 100.0 D:\DCIM E:\OUTPUT")
     parser.add_argument(
         "-t", 
@@ -88,11 +89,36 @@ class InspectImages:
         self.debug_flag = self._args["debug"]
         self.min_altitude = self._args["alt"][0]
         self.max_altitude = self._args["alt"][1]
-        self.image_type = self._args["type"]
+        self.image_type = self._args["type"] # Image type Nadir (N), Oblique (O), Any (A). Defaults to (A)
+        self.display_kml = [] # Shows both the images and the boundary
+        self.points = [] # # points is a list of (latitude, longitude) tuples
 
+    def CreateHull(self):
+        self.boundary_kml = [] # This is the boundary derived from image lat/long (convex hull)
+        
+        # points is a list of (latitude, longitude) tuples
+        hull = ConvexHull(self.points)
+
+        # create the KML document
+        self.boundary_kml = Kml()
+
+        coords = [(self.points[i][0],self.points[i][1]) for i in hull.vertices]
+        coords.append(coords[0])
+
+        polygon = Polygon(outerboundaryis=coords)
+
+        #adding polygon to the boundary_kml
+        pol = self.boundary_kml.newpolygon(name='Convex Hull', outerboundaryis=coords)
+        pol.style.polystyle.color = '00000000' # 00 for transparent and ff for opaque
+        pol.style.polystyle.fill = 1
+        
+        # Now add polygon to the display_kml
+        pol = self.display_kml.newpolygon(name='Convex Hull', outerboundaryis=coords)
+        pol.style.polystyle.color = '00000000' # 00 for transparent and ff for opaque
+        pol.style.polystyle.fill = 1
+        
     def process(self):
         global NADIRLIMIT, min_altitude, max_altitude, cardinals
-        kml = None
         camera_yaw = None
         
         input_folder = self.input_folder
@@ -131,8 +157,8 @@ class InspectImages:
                 logging.getLogger().setLevel(logging.DEBUG)
                 
             logger = logging.getLogger()
-            kml = Kml()
-            folder = kml.newfolder(name='VIMANA')
+            self.display_kml = Kml()
+            folder = self.display_kml.newfolder(name='VIMANA')
             # sharedstyle.labelstyle.color = "ff0000ff"  # Red
         except Exception as Ex:
             print("No idea what happened. Do you have permission? {}".format(Ex))
@@ -233,6 +259,7 @@ class InspectImages:
                     logger.debug(str(gps_all) + '\n')
                     logger.debug(xmp_string + '\n')    
                     
+                    self.points.append(tuple([long_in_degrees, lat_in_degrees]))
                     pnt = folder.newpoint(name="{0}".format(altitude), coords=[(long_in_degrees, lat_in_degrees)])
                     if is_nadir == True:
                         pnt.style = shared_nadir_style
@@ -241,7 +268,6 @@ class InspectImages:
                         # pnt.style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png'
                         # pnt.style.iconstyle.icon.href = 'https://earth.google.com/images/kml-icons/track-directional/track-0.png'
                         # pnt.style.iconstyle.heading = camera_yaw   # The KML becomes humungous when each point has its personal style
-                
                 except Exception as e:
                     print(e)
                     print("This image file ({}) has no GPS info ".format(image))
@@ -250,18 +276,28 @@ class InspectImages:
         if found_images == False:
             print("Couldn't find anything to process!!")
             sys.exit(0)
-            
-        try:
-            imagelocations = os.path.join(output_folder, "Points.kml")
-            kml.save(imagelocations)
-            print("KML file ({}) created".format(imagelocations))
-        except:
-            print("Unable to create KML")
-            pass
+              
     
 def main(args):
-    image_inspector = InspectImages(args)
-    image_inspector.process()
+    try:
+        image_inspector = InspectImages(args)
+        image_inspector.process()
+        imagelocations = os.path.join(image_inspector.output_folder, "Images.kml")
+        image_inspector.display_kml.save(imagelocations)
+        
+        image_inspector.CreateHull()
+        
+        imagelocations = os.path.join(image_inspector.output_folder, "Boundary.kml")
+        image_inspector.boundary_kml.save(imagelocations)
+        
+        imagelocations = os.path.join(image_inspector.output_folder, "Images_and_Boundary.kml")
+        image_inspector.display_kml.save(imagelocations)
+        
+        print("KML files created in {}".format(image_inspector.output_folder))
+    except:
+        print("Unable to create KML")
+        pass
+    
 
 if __name__ == "__main__":
     args = get_args()
