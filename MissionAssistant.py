@@ -11,76 +11,52 @@ import argparse
 import sys, getopt
 from scipy.spatial import ConvexHull
 
-NADIRLIMIT = -88.0   # If Gimbal Pitch is < NADIRLIMIT then the image is consider Nadir else Oblique
-min_altitude = 00.0       # I'm only interested in this range of altitudes
-max_altitude = 10000.0
-cardinals = 36       # Map angle to nearest cardinal direction (specify 4, 8, 12, 18, 36)
-
-def degrees_to_cardinals(degrees, cardinals):
-    """Returns a cardinal value for an angle [0, 360] => [0, cardinals-1]. Applies correction to angle."""
-    correction = 360.0 / (2.0 * cardinals)
-    return math.floor((float((degrees + correction + 360) % 360.0)/360.0) * float(cardinals))
-
-def convert_to_degrees(value):
-    """Returns float angle when given a list of [degrees, minutes, seconds]"""
-    d0 = value[0]
-    m0 = value[1]
-    s0 = value[2]  
-    return float(d0) + (float(m0)/60.0) + (float(s0)/3600.0)
-
-def get_xmp_as_xml_string(image_path):
-    """Return extended metadata of JPG image. E.g. Yaw, Pitch, Roll is available here"""
-    with Image.open(image_path) as im:
-        for segment,content in im.applist:
-            if segment == 'APP1' and b"<x:xmpmeta" in content:
-                start = content.index(b"<x:xmpmeta")
-                end = content.index(b"</x:xmpmeta>") + len(b"</x:xmpmeta>")
-                return content[start:end].decode()
-    return None
-
 def get_args():
-    parser = argparse.ArgumentParser("MissionAssistant:", description="Mission Assistant: Inspect drone images on site to detect problems. It also generates a KML polygon of site boundary based on images chosen.",
-                                    epilog="Usage Example: MissionAssistant.exe -i -t N -a 1.0 100.0 D:\DCIM E:\OUTPUT")
-    parser.add_argument(
-        "-t", 
-        "--type", 
-        choices=['N', 'O', 'A'], 
-        default='A', 
-        help="Image type Nadir (N), Oblique (O), Any (A). Defaults to (A)")
-    parser.add_argument(
-        "-a", 
-        "--alt", 
-        required=True,
-        nargs=2, 
-        type=float, 
-        help="Specify min followed by max altitude. Only images in this range are considered.")
-    parser.add_argument(
-        "-d", 
-        "--debug", 
-        action='store_true', 
-        help="Debug option. Collects extra information in log file for debugging purposes.")
-    parser.add_argument(
-        "-i", 
-        "--info", 
-        action='store_true', 
-        help="Inspect option. Writes image information to log file for informational purposes.")
-    parser.add_argument(
-        "infolder", 
-        help="Input folder with JPG images. All subfolders are also searched for JPG files.")
-    parser.add_argument(
-        "outfolder", 
-        nargs='?', 
-        help="KML output is written to this folder. If not specified, it is written to input folder.")
+        parser = argparse.ArgumentParser("MissionAssistant:", description="Mission Assistant: Inspect drone images on site to detect problems. It also generates a KML polygon of site boundary based on images chosen.",
+                                        epilog="Usage Example: MissionAssistant.exe -i -t N -a 1.0 100.0 D:\DCIM E:\OUTPUT")
+        parser.add_argument(
+            "-t", 
+            "--type", 
+            choices=['N', 'O', 'A'], 
+            default='A', 
+            help="Image type Nadir (N), Oblique (O), Any (A). Defaults to (A)")
+        parser.add_argument(
+            "-a", 
+            "--alt", 
+            required=True,
+            nargs=2, 
+            type=float, 
+            help="Specify min followed by max altitude. Only images in this range are considered.")
+        parser.add_argument(
+            "-d", 
+            "--debug", 
+            action='store_true', 
+            help="Debug option. Collects extra information in log file for debugging purposes.")
+        parser.add_argument(
+            "-i", 
+            "--info", 
+            action='store_true', 
+            help="Inspect option. Writes image information to log file for informational purposes.")
+        parser.add_argument(
+            "infolder", 
+            help="Input folder with JPG images. All subfolders are also searched for JPG files.")
+        parser.add_argument(
+            "outfolder", 
+            nargs='?', 
+            help="KML output is written to this folder. If not specified, it is written to input folder.")
 
-    if len(sys.argv)==1:
-        parser.print_help(sys.stderr)
-        sys.exit(1)
-    args = parser.parse_args()
-    args_dict = vars(args)
-    
-    return args_dict
+        if len(sys.argv)==1:
+            parser.print_help(sys.stderr)
+            sys.exit(1)
+        args = parser.parse_args()
+        args_dict = vars(args)
+        
+        return args_dict
 
 class InspectImages:
+    NADIRLIMIT = -88.0   # If Gimbal Pitch is < NADIRLIMIT then the image is consider Nadir else Oblique
+    cardinals = 36       # Map angle to nearest cardinal direction (specify 4, 8, 12, 18, 36)
+
     def __init__(self, args):
         self._args = args
         self.input_folder = self._args["infolder"]
@@ -93,10 +69,35 @@ class InspectImages:
         self.display_kml = [] # Shows both the images and the boundary
         self.points = [] # # points is a list of (latitude, longitude) tuples
 
+    @staticmethod
+    def get_xmp_as_xml_string(imagename):
+        """Return extended metadata of JPG image. E.g. Yaw, Pitch, Roll is available here"""
+        with Image.open(imagename) as im:
+            for segment,content in im.applist:
+                if segment == 'APP1' and b"<x:xmpmeta" in content:
+                    start = content.index(b"<x:xmpmeta")
+                    end = content.index(b"</x:xmpmeta>") + len(b"</x:xmpmeta>")
+                    return content[start:end].decode()
+        return None
+    
+    @staticmethod
+    def convert_to_degrees(value):
+        """Returns float angle when given a list of [degrees, minutes, seconds]"""
+        d0 = value[0]
+        m0 = value[1]
+        s0 = value[2]  
+        return float(d0) + (float(m0)/60.0) + (float(s0)/3600.0)
+
+    @staticmethod
+    def degrees_to_cardinals(degrees):
+        """Returns a cardinal value for an angle [0, 360] => [0, InspectImages.cardinals-1]. Applies correction to angle."""
+        correction = 360.0 / (2.0 * InspectImages.cardinals)
+        return math.floor((float((degrees + correction + 360) % 360.0)/360.0) * float(InspectImages.cardinals))
+    
     def CreateHull(self):
         self.boundary_kml = [] # This is the boundary derived from image lat/long (convex hull)
         
-        # points is a list of (latitude, longitude) tuples
+        # points is a list of (latitude, longitude) tuples (i.e., image locations)
         hull = ConvexHull(self.points)
 
         # create the KML document
@@ -112,13 +113,12 @@ class InspectImages:
         pol.style.polystyle.color = '00000000' # 00 for transparent and ff for opaque
         pol.style.polystyle.fill = 1
         
-        # Now add polygon to the display_kml
+        # Now add polygon to the display_kml (this already has image locations)
         pol = self.display_kml.newpolygon(name='Convex Hull', outerboundaryis=coords)
         pol.style.polystyle.color = '00000000' # 00 for transparent and ff for opaque
         pol.style.polystyle.fill = 1
         
     def process(self):
-        global NADIRLIMIT, min_altitude, max_altitude, cardinals
         camera_yaw = None
         
         input_folder = self.input_folder
@@ -137,10 +137,10 @@ class InspectImages:
         
         # Dictionary of styles for oblique images - one for each cardinal direction
         style_dict = {}
-        for i in range(cardinals):
+        for i in range(InspectImages.cardinals):
             style_dict[i] = Style()
             style_dict[i].iconstyle.icon.href = 'https://earth.google.com/images/kml-icons/track-directional/track-0.png'
-            style_dict[i].iconstyle.heading = i * 360.0/float(cardinals)
+            style_dict[i].iconstyle.heading = i * 360.0/float(InspectImages.cardinals)
         
         # Style for nadir images
         shared_nadir_style = Style()
@@ -184,7 +184,7 @@ class InspectImages:
                 is_nadir = False
                 
                 try:
-                    xmp_string = get_xmp_as_xml_string(imagename)
+                    xmp_string = InspectImages.get_xmp_as_xml_string(imagename)
                     if xmp_string is None:
                         print("Unable to inspect {}".format(imagename))
                         logger.debug("Unable to inspect {}".format(imagename))
@@ -200,7 +200,7 @@ class InspectImages:
                 for elt in e.iter():
                     if elt.tag == "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description":
                         try:
-                            if float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree']) < NADIRLIMIT:
+                            if float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree']) < InspectImages.NADIRLIMIT:
                                 is_nadir = True
                             else:
                                 camera_yaw = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalYawDegree'])
@@ -234,14 +234,14 @@ class InspectImages:
                     altitude = float(gps_all.get("GPSAltitude"))
                     
                     if long_ref == "W":
-                        long_in_degrees = -abs(convert_to_degrees(longitude))
+                        long_in_degrees = -abs(InspectImages.convert_to_degrees(longitude))
                     else:
-                        long_in_degrees = convert_to_degrees(longitude)
+                        long_in_degrees = InspectImages.convert_to_degrees(longitude)
                         
                     if lat_ref == "S":
-                        lat_in_degrees = -abs(convert_to_degrees(latitude))
+                        lat_in_degrees = -abs(InspectImages.convert_to_degrees(latitude))
                     else:
-                        lat_in_degrees = convert_to_degrees(latitude)
+                        lat_in_degrees = InspectImages.convert_to_degrees(latitude)
                         
                     if not(self.min_altitude < altitude < self.max_altitude):
                         continue
@@ -264,7 +264,7 @@ class InspectImages:
                     if is_nadir == True:
                         pnt.style = shared_nadir_style
                     else:
-                        pnt.style = style_dict[degrees_to_cardinals(camera_yaw, cardinals)] # Assign a predefined style
+                        pnt.style = style_dict[InspectImages.degrees_to_cardinals(camera_yaw)] # Assign a predefined style
                         # pnt.style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png'
                         # pnt.style.iconstyle.icon.href = 'https://earth.google.com/images/kml-icons/track-directional/track-0.png'
                         # pnt.style.iconstyle.heading = camera_yaw   # The KML becomes humungous when each point has its personal style
@@ -275,8 +275,7 @@ class InspectImages:
 
         if found_images == False:
             print("Couldn't find anything to process!!")
-            sys.exit(0)
-              
+            sys.exit(0)            
     
 def main(args):
     try:
@@ -293,10 +292,10 @@ def main(args):
         imagelocations = os.path.join(image_inspector.output_folder, "Images_and_Boundary.kml")
         image_inspector.display_kml.save(imagelocations)
         
-        print("KML files created in {}".format(image_inspector.output_folder))
-    except:
-        print("Unable to create KML")
-        pass
+        print("KML files created in {}.".format(image_inspector.output_folder))
+    except Exception as e:
+        print("Unable to create KML. Following error occurred:")
+        print(e)
     
 
 if __name__ == "__main__":
