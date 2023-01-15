@@ -12,12 +12,16 @@
             "console": "integratedTerminal",
             "args":[
                 "-t",
-                "A",
+                "O",
                 "-a",
-                "10",
-                "1940",
-                "Z:\\Temp\\Image Processing\\East Fishkill\\DCIM",
-                "Z:\\Temp/Image Processing\\East Fishkill\\DCIM"
+                "129",
+                "150",
+                "Z:\\Temp\\Image Processing\\regeneron",
+                "Z:\\Temp\\Image Processing\\regeneron"
+                //"Z:\\Temp\\Image Processing\\Experiment\\TESTING",
+                //"Z:\\Temp\\Image Processing\\Experiment\\TESTING"
+                //"Z:\\Temp\\Image Processing\\WINGTRA",
+                //"Z:\\Temp/Image Processing\\WINGTRA"
                 //"Z:\\Ubuntu\\shared\\UB\\down\\down\\WORK\\NUTLEY\\DCIM\\INSPECTION",
                 //"Z:\\Ubuntu\\shared\\UB\\down\\down\\WORK\\NUTLEY"
             ]
