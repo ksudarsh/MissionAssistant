@@ -53,6 +53,85 @@ def get_args():
         
         return args_dict
 
+class ImageMetadata:
+    def __init__(self, imagename):
+        self.image_name = imagename
+        self.camera_maker = None
+        self.camera_model = None
+        self.camera_yaw = None
+        self.camera_pitch = None
+        self.camera_altitude = None
+        self.camera_latitude = None
+        self.camera_longitude = None
+
+        gps_all = {}
+        try:
+            pil_img = Image.open(imagename)
+            exif = {ExifTags.TAGS[k]: v for k, v in pil_img._getexif().items() if k in ExifTags.TAGS}
+            
+            self.camera_maker = exif['Make']
+            self.camera_model = exif['Model']
+            
+            for key in exif['GPSInfo'].keys():
+                decoded_value = ExifTags.GPSTAGS.get(key)
+                gps_all[decoded_value] = exif['GPSInfo'][key]
+            
+            long_ref = gps_all.get("GPSLongitudeRef")
+            longitude = gps_all.get("GPSLongitude")
+            lat_ref = gps_all.get("GPSLatitudeRef")
+            latitude = gps_all.get("GPSLatitude")
+            
+            if long_ref == "W":
+                self.camera_longitude = long_in_degrees = -abs(ImageMetadata.convert_to_degrees(longitude))
+            else:
+                self.camera_longitude = ImageMetadata.convert_to_degrees(longitude)
+                
+            if lat_ref == "S":
+                self.camera_latitude = -abs(ImageMetadata.convert_to_degrees(latitude))
+            else:
+                self.camera_latitude = ImageMetadata.convert_to_degrees(latitude)
+                
+            self.camera_altitude = float(gps_all.get("GPSAltitude"))
+            
+        except Exception as Ex:
+            print("Exception while reading {} image metadata: {}".format(imagename, Ex))
+            raise # I consider this fatal since we did find relevant exif metadata
+
+        try:
+            xmp_string = ImageMetadata.get_xmp_as_xml_string(imagename)
+            if xmp_string is not None:
+                e = ET.ElementTree(ET.fromstring(xmp_string))
+                try:
+                    for elt in e.iter():
+                        if elt.tag == "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description":
+                            self.camera_pitch = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree'])
+                            self.camera_yaw = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalYawDegree'])
+                except KeyError as Ex:
+                    print("KeyError exception {} : {}".format(imagename, Ex))
+                    pass # I don't consider this fatal since we did find lat/long
+        except Exception as Ex:
+            print("Exception while reading {} extended image metadata: {}".format(imagename, Ex))
+            pass # I don't consider this fatal since we did find lat/long
+               
+    @staticmethod
+    def get_xmp_as_xml_string(imagename):
+        """Return extended metadata of JPG image. E.g. Yaw, Pitch, Roll is available here"""
+        with Image.open(imagename) as im:
+            for segment,content in im.applist:
+                if segment == 'APP1' and b"<x:xmpmeta" in content:
+                    start = content.index(b"<x:xmpmeta")
+                    end = content.index(b"</x:xmpmeta>") + len(b"</x:xmpmeta>")
+                    return content[start:end].decode()
+        return None
+    
+    @staticmethod
+    def convert_to_degrees(value):
+        """Returns float angle when given a list of [degrees, minutes, seconds]"""
+        d0 = value[0]
+        m0 = value[1]
+        s0 = value[2]  
+        return float(d0) + (float(m0)/60.0) + (float(s0)/3600.0)
+
 class InspectImages:
     NADIRLIMIT = -88.0   # If Gimbal Pitch is < NADIRLIMIT then the image is consider Nadir else Oblique
     cardinals = 36       # Map angle to nearest cardinal direction (specify 4, 8, 12, 18, 36)
@@ -66,7 +145,7 @@ class InspectImages:
         self.min_altitude = self._args["alt"][0]
         self.max_altitude = self._args["alt"][1]
         self.image_type = self._args["type"] # Image type Nadir (N), Oblique (O), Any (A). Defaults to (A)
-        self.display_kml = [] # Shows both the images and the boundary
+        self.display_kml = None # Shows both the images and the boundary
         self.points = [] # # points is a list of (latitude, longitude) tuples
 
     @staticmethod
@@ -181,34 +260,26 @@ class InspectImages:
             for image in img_contents:
                 imagename = os.path.join(input_folder, image)
                 
-                is_nadir = False
+                is_nadir = False  
                 
                 try:
-                    xmp_string = InspectImages.get_xmp_as_xml_string(imagename)
-                    if xmp_string is None:
-                        print("Unable to inspect {}".format(imagename))
-                        logger.debug("Unable to inspect {}".format(imagename))
-                        continue
+                    imagemetadata = ImageMetadata(imagename)
+                    if imagemetadata.camera_pitch is not None:
+                        if imagemetadata.camera_pitch < InspectImages.NADIRLIMIT:
+                                    is_nadir = True
+                    else:
+                        pass
                 except UnidentifiedImageError:
                     print("Unable to inspect {}".format(imagename))
                     logger.debug("Unable to inspect {}".format(imagename))
                     continue
-                                
-                logger.debug(xmp_string + '\n')   
-                    
-                e = ET.ElementTree(ET.fromstring(xmp_string))
-                for elt in e.iter():
-                    if elt.tag == "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description":
-                        try:
-                            if float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree']) < InspectImages.NADIRLIMIT:
-                                is_nadir = True
-                            else:
-                                camera_yaw = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalYawDegree'])
-                        except KeyError:
-                            print("Unsupported image format {}".format(imagename))
-                            logger.debug("Unsupported image format {}".format(imagename))
-                            continue
-                #========================
+                except KeyError:
+                    print("Unsupported image format {}".format(imagename))
+                    logger.debug("Unsupported image format {}".format(imagename))
+                    continue   
+                except Exception as Ex:
+                    print("No idea what happened. Do you have permission? {}".format(Ex))     
+                    continue     
         
                 if nadir_or_oblique == 'N':
                     if is_nadir == False:
@@ -217,61 +288,18 @@ class InspectImages:
                     if is_nadir == True:
                         continue
                 
-                gps_all = {}
-                try:
-                    pil_img = Image.open(imagename)
-                    exif = {ExifTags.TAGS[k]: v for k, v in pil_img._getexif().items() if k in ExifTags.TAGS}
+                if not(self.min_altitude < imagemetadata.camera_altitude < self.max_altitude):
+                    continue
                     
-                    for key in exif['GPSInfo'].keys():
-                        decoded_value = ExifTags.GPSTAGS.get(key)
-                        gps_all[decoded_value] = exif['GPSInfo'][key]
-                    
-                        
-                    long_ref = gps_all.get("GPSLongitudeRef")
-                    longitude = gps_all.get("GPSLongitude")
-                    lat_ref = gps_all.get("GPSLatitudeRef")
-                    latitude = gps_all.get("GPSLatitude")
-                    altitude = float(gps_all.get("GPSAltitude"))
-                    
-                    if long_ref == "W":
-                        long_in_degrees = -abs(InspectImages.convert_to_degrees(longitude))
-                    else:
-                        long_in_degrees = InspectImages.convert_to_degrees(longitude)
-                        
-                    if lat_ref == "S":
-                        lat_in_degrees = -abs(InspectImages.convert_to_degrees(latitude))
-                    else:
-                        lat_in_degrees = InspectImages.convert_to_degrees(latitude)
-                        
-                    if not(self.min_altitude < altitude < self.max_altitude):
-                        continue
-                    
-                    # Append image details into this string and dump into log file as a single CSV string
-                    img_details = imagename + ","
-                    
-                    if is_nadir == True:               # Write Image name and whether Nadir (N) or Oblique (O)
-                        img_details += 'N'
-                    else:
-                        img_details += 'O'
-                    
-                    logger.info(img_details + ',' + str(lat_in_degrees) + ',' + str(long_in_degrees) + ',' + str(altitude))
-                    
-                    logger.debug(str(gps_all) + '\n')
-                    logger.debug(xmp_string + '\n')    
-                    
-                    self.points.append(tuple([long_in_degrees, lat_in_degrees]))
-                    pnt = folder.newpoint(name="{0}".format(altitude), coords=[(long_in_degrees, lat_in_degrees)])
-                    if is_nadir == True:
-                        pnt.style = shared_nadir_style
-                    else:
-                        pnt.style = style_dict[InspectImages.degrees_to_cardinals(camera_yaw)] # Assign a predefined style
-                        # pnt.style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png'
-                        # pnt.style.iconstyle.icon.href = 'https://earth.google.com/images/kml-icons/track-directional/track-0.png'
-                        # pnt.style.iconstyle.heading = camera_yaw   # The KML becomes humungous when each point has its personal style
-                except Exception as e:
-                    print(e)
-                    print("This image file ({}) has no GPS info ".format(image))
-                    pass
+                self.points.append(tuple([imagemetadata.camera_longitude, imagemetadata.camera_latitude]))
+                pnt = folder.newpoint(name="{0}".format(imagemetadata.camera_altitude), coords=[(imagemetadata.camera_longitude, imagemetadata.camera_latitude)])
+                if is_nadir == True or imagemetadata.camera_yaw is None: # If no yaw is available, assume Nadir image
+                    pnt.style = shared_nadir_style
+                else:
+                    pnt.style = style_dict[InspectImages.degrees_to_cardinals(imagemetadata.camera_yaw)] # Assign a predefined style
+                    # pnt.style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png'
+                    # pnt.style.iconstyle.icon.href = 'https://earth.google.com/images/kml-icons/track-directional/track-0.png'
+                    # pnt.style.iconstyle.heading = camera_yaw   # The KML becomes humungous when each point has its personal style
 
         if found_images == False:
             print("Couldn't find anything to process!!")
@@ -293,9 +321,9 @@ def main(args):
         image_inspector.display_kml.save(imagelocations)
         
         print("KML files created in {}.".format(image_inspector.output_folder))
-    except Exception as e:
-        print("Unable to create KML. Following error occurred:")
-        print(e)
+    except Exception as Ex:
+        print("Unable to create KML. Following error occurred: {}".format(Ex))
+        exit(1)
     
 
 if __name__ == "__main__":
