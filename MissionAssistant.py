@@ -51,6 +51,8 @@ def get_args():
         args = parser.parse_args()
         args_dict = vars(args)
         
+        if args_dict["outfolder"] is None:
+            args_dict["outfolder"] = args_dict["infolder"]
         return args_dict
 
 class ImageMetadata:
