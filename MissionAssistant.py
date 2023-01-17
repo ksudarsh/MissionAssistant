@@ -69,8 +69,8 @@ class ImageMetadata:
             pil_img = Image.open(imagename)
             exif = {ExifTags.TAGS[k]: v for k, v in pil_img._getexif().items() if k in ExifTags.TAGS}
             
-            self.camera_maker = exif['Make']
-            self.camera_model = exif['Model']
+            self.camera_maker = exif['Make'].rstrip('\x00')
+            self.camera_model = exif['Model'].rstrip('\x00')
             
             for key in exif['GPSInfo'].keys():
                 decoded_value = ExifTags.GPSTAGS.get(key)
@@ -96,22 +96,38 @@ class ImageMetadata:
         except Exception as Ex:
             print("Exception while reading {} image metadata: {}".format(imagename, Ex))
             raise # I consider this fatal since we did find relevant exif metadata
-
-        try:
-            xmp_string = ImageMetadata.get_xmp_as_xml_string(imagename)
-            if xmp_string is not None:
-                e = ET.ElementTree(ET.fromstring(xmp_string))
-                try:
-                    for elt in e.iter():
-                        if elt.tag == "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description":
-                            self.camera_pitch = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree'])
-                            self.camera_yaw = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalYawDegree'])
-                except KeyError as Ex:
-                    print("KeyError exception {} : {}".format(imagename, Ex))
-                    pass # I don't consider this fatal since we did find lat/long
-        except Exception as Ex:
-            print("Exception while reading {} extended image metadata: {}".format(imagename, Ex))
-            pass # I don't consider this fatal since we did find lat/long
+        if self.camera_maker == "DJI" or self.camera_maker == "Hasselblad":
+            try:
+                xmp_string = ImageMetadata.get_xmp_as_xml_string(imagename)
+                if xmp_string is not None:
+                    e = ET.ElementTree(ET.fromstring(xmp_string))
+                    try:
+                        for elt in e.iter():
+                            if elt.tag == "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description":
+                                self.camera_pitch = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree'])
+                                self.camera_yaw = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalYawDegree'])
+                    except KeyError as Ex:
+                        print("KeyError exception {} : {}".format(imagename, Ex))
+                        pass # I don't consider this fatal since we did find lat/long
+            except Exception as Ex:
+                print("Exception while reading {} extended image metadata: {}".format(imagename, Ex))
+                pass # I don't consider this fatal since we did find lat/long
+        elif self.camera_maker == "SONY":
+            try:
+                xmp_string = ImageMetadata.get_xmp_as_xml_string(imagename)
+                if xmp_string is not None:
+                    e = ET.ElementTree(ET.fromstring(xmp_string))
+                    try:
+                        for elt in e.iter():
+                            pass
+                    except Exception as Ex:
+                        print("KeyError exception {} : {}".format(imagename, Ex))
+                        pass # I don't consider this fatal since we did find lat/long
+            except Exception as Ex:
+                print("Exception while reading {} extended image metadata: {}".format(imagename, Ex))
+                pass # I don't consider this fatal since we did find lat/long
+        else:
+            pass # Unknown camera type     
                
     @staticmethod
     def get_xmp_as_xml_string(imagename):
@@ -174,10 +190,13 @@ class InspectImages:
         return math.floor((float((degrees + correction + 360) % 360.0)/360.0) * float(InspectImages.cardinals))
     
     def CreateHull(self):
-        self.boundary_kml = [] # This is the boundary derived from image lat/long (convex hull)
+        self.boundary_kml = None # This is the boundary derived from image lat/long (convex hull)
         
         # points is a list of (latitude, longitude) tuples (i.e., image locations)
-        hull = ConvexHull(self.points)
+        if len(self.points) > 2:   # ConvexHull needs at least 3 points
+            hull = ConvexHull(self.points)
+        else:
+            return
 
         # create the KML document
         self.boundary_kml = Kml()
@@ -293,13 +312,10 @@ class InspectImages:
                     
                 self.points.append(tuple([imagemetadata.camera_longitude, imagemetadata.camera_latitude]))
                 pnt = folder.newpoint(name="{0}".format(imagemetadata.camera_altitude), coords=[(imagemetadata.camera_longitude, imagemetadata.camera_latitude)])
-                if is_nadir == True or imagemetadata.camera_yaw is None: # If no yaw is available, assume Nadir image
+                if is_nadir == True or imagemetadata.camera_pitch is None: # If no yaw is available, assume Nadir image
                     pnt.style = shared_nadir_style
                 else:
                     pnt.style = style_dict[InspectImages.degrees_to_cardinals(imagemetadata.camera_yaw)] # Assign a predefined style
-                    # pnt.style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png'
-                    # pnt.style.iconstyle.icon.href = 'https://earth.google.com/images/kml-icons/track-directional/track-0.png'
-                    # pnt.style.iconstyle.heading = camera_yaw   # The KML becomes humungous when each point has its personal style
 
         if found_images == False:
             print("Couldn't find anything to process!!")
@@ -315,7 +331,8 @@ def main(args):
         image_inspector.CreateHull()
         
         imagelocations = os.path.join(image_inspector.output_folder, "Boundary.kml")
-        image_inspector.boundary_kml.save(imagelocations)
+        if image_inspector.boundary_kml is not None:
+            image_inspector.boundary_kml.save(imagelocations)
         
         imagelocations = os.path.join(image_inspector.output_folder, "Images_and_Boundary.kml")
         image_inspector.display_kml.save(imagelocations)
