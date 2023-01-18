@@ -96,7 +96,7 @@ class ImageMetadata:
             self.camera_altitude = float(gps_all.get("GPSAltitude"))
             
         except Exception as Ex:
-            print("Exception while reading {} image metadata: {}".format(imagename, Ex))
+            logging.warning("Exception while reading {} image metadata: {}".format(imagename, Ex))
             raise # I consider this fatal since we did find relevant exif metadata
         if self.camera_maker == "DJI" or self.camera_maker == "Hasselblad":
             try:
@@ -109,10 +109,10 @@ class ImageMetadata:
                                 self.camera_pitch = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree'])
                                 self.camera_yaw = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalYawDegree'])
                     except KeyError as Ex:
-                        print("KeyError exception {} : {}".format(imagename, Ex))
+                        logging.warning("KeyError exception {} : {}".format(imagename, Ex))
                         pass # I don't consider this fatal since we did find lat/long
             except Exception as Ex:
-                print("Exception while reading {} extended image metadata: {}".format(imagename, Ex))
+                logging.warning("Exception while reading {} extended image metadata: {}".format(imagename, Ex))
                 pass # I don't consider this fatal since we did find lat/long
         elif self.camera_maker == "SONY":
             try:
@@ -123,10 +123,10 @@ class ImageMetadata:
                         for elt in e.iter():
                             pass
                     except Exception as Ex:
-                        print("KeyError exception {} : {}".format(imagename, Ex))
+                        logging.warning("KeyError exception {} : {}".format(imagename, Ex))
                         pass # I don't consider this fatal since we did find lat/long
             except Exception as Ex:
-                print("Exception while reading {} extended image metadata: {}".format(imagename, Ex))
+                logging.warning("Exception while reading {} extended image metadata: {}".format(imagename, Ex))
                 pass # I don't consider this fatal since we did find lat/long
         else:
             pass # Unknown camera type     
@@ -248,30 +248,20 @@ class InspectImages:
         shared_nadir_style.labelstyle.color = 'ff0000ff'  # Red
         
         try:
-            logfile_path = os.path.join(output_folder, "LOGFILE.txt")
-            logging.basicConfig(filename = logfile_path, filemode = 'w')
-            
-            if self.info_flag == True:   
-                logging.getLogger().setLevel(logging.INFO)
-            if self.debug_flag == True:
-                logging.getLogger().setLevel(logging.DEBUG)
-                
-            logger = logging.getLogger()
             self.display_kml = Kml()
             folder = self.display_kml.newfolder(name='VIMANA')
             # sharedstyle.labelstyle.color = "ff0000ff"  # Red
         except Exception as Ex:
-            print("No idea what happened. Do you have permission? {}".format(Ex))
+            logging.fatal("No idea what happened. Do you have permission? {}".format(Ex))
             exit(0)
         
         root_folder = input_folder    
         found_images = False
         
-        if self.debug_flag == True:
-            print("Debug flag : {}, Info flag : {}".format(self.debug_flag, self.info_flag))
-            print("Type of images required: {}".format(self.image_type))
-            print("Min altitude : {}, Max altitude : {}".format(self.min_altitude, self.max_altitude))
-            
+        logging.info("Debug flag : {}, Info flag : {}".format(self.debug_flag, self.info_flag))
+        logging.info("Type of images required: {}".format(self.image_type))
+        logging.info("Min altitude : {}, Max altitude : {}".format(self.min_altitude, self.max_altitude))
+        
         for input_folder, dir_names, filenames in os.walk(root_folder):
             img_contents = [s for s in os.listdir(input_folder) if s.endswith('.JPG') or s.endswith('.jpg')] # Only pick .JPG or .jpg
                 
@@ -289,17 +279,9 @@ class InspectImages:
                         if imagemetadata.camera_pitch < InspectImages.NADIRLIMIT:
                                     is_nadir = True
                     else:
-                        pass
-                except UnidentifiedImageError:
-                    print("Unable to inspect {}".format(imagename))
-                    logger.debug("Unable to inspect {}".format(imagename))
-                    continue
-                except KeyError:
-                    print("Unsupported image format {}".format(imagename))
-                    logger.debug("Unsupported image format {}".format(imagename))
-                    continue   
+                        pass 
                 except Exception as Ex:
-                    print("No idea what happened. Do you have permission? {}".format(Ex))     
+                    logging.fatal("No idea what happened. Do you have permission? {}".format(Ex))     
                     continue     
         
                 if nadir_or_oblique == 'N':
@@ -320,12 +302,22 @@ class InspectImages:
                     pnt.style = style_dict[InspectImages.degrees_to_cardinals(imagemetadata.camera_yaw)] # Assign a predefined style
 
         if found_images == False:
-            print("Couldn't find anything to process!!")
+            logging.fatal("Couldn't find anything to process!!")
             sys.exit(0)            
     
 def main(args):
     try:
         image_inspector = InspectImages(args)
+        
+        logfile_path = os.path.join(image_inspector.output_folder, "LOGFILE.txt")
+        logging.basicConfig(level=logging.INFO, filename=logfile_path, filemode='w', 
+                                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        
+        if image_inspector.info_flag == True:   
+            logging.basicConfig(level=logging.INFO)
+        if image_inspector.debug_flag == True:
+            logging.basicConfig(level=logging.DEBUG)
+        
         image_inspector.process()
         imagelocations = os.path.join(image_inspector.output_folder, "Images.kml")
         image_inspector.display_kml.save(imagelocations)
