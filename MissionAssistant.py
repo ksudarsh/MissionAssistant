@@ -6,7 +6,7 @@ import logging
 from os import write
 from PIL import Image, ExifTags, UnidentifiedImageError
 import xml.etree.ElementTree as ET
-from simplekml import Kml, Style, Polygon
+from simplekml import Kml, Style, Polygon, Color
 import argparse
 import sys, getopt
 from scipy.spatial import ConvexHull
@@ -212,11 +212,16 @@ class InspectImages:
         pol = self.boundary_kml.newpolygon(name='Convex Hull', outerboundaryis=coords)
         pol.style.polystyle.color = '00000000' # 00 for transparent and ff for opaque
         pol.style.polystyle.fill = 1
+        pol.style.linestyle.width = 5
+        pol.style.linestyle.color = Color.green
+
         
         # Now add polygon to the display_kml (this already has image locations)
         pol = self.display_kml.newpolygon(name='Convex Hull', outerboundaryis=coords)
         pol.style.polystyle.color = '00000000' # 00 for transparent and ff for opaque
         pol.style.polystyle.fill = 1
+        pol.style.linestyle.width = 5
+        pol.style.linestyle.color = Color.green
         
     def process(self):
         camera_yaw = None
@@ -319,17 +324,17 @@ def main(args):
             logging.basicConfig(level=logging.DEBUG)
         
         image_inspector.process()
-        imagelocations = os.path.join(image_inspector.output_folder, "Images.kml")
-        image_inspector.display_kml.save(imagelocations)
+        outputlocation = os.path.join(image_inspector.output_folder, "Images.kml")
+        image_inspector.display_kml.save(outputlocation)
         
         image_inspector.CreateHull()
         
-        imagelocations = os.path.join(image_inspector.output_folder, "Boundary.kml")
+        outputlocation = os.path.join(image_inspector.output_folder, "Boundary.kml")
         if image_inspector.boundary_kml is not None:
-            image_inspector.boundary_kml.save(imagelocations)
+            image_inspector.boundary_kml.save(outputlocation)
         
-        imagelocations = os.path.join(image_inspector.output_folder, "Images_and_Boundary.kml")
-        image_inspector.display_kml.save(imagelocations)
+        outputlocation = os.path.join(image_inspector.output_folder, "Images_and_Boundary.kml")
+        image_inspector.display_kml.save(outputlocation)
         
         print("KML files created in {}.".format(image_inspector.output_folder))
     except Exception as Ex:
