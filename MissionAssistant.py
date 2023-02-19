@@ -96,7 +96,7 @@ class ImageMetadata:
             self.camera_altitude = float(gps_all.get("GPSAltitude"))
             
         except Exception as Ex:
-            logging.warning("Exception while reading {} image metadata: {}".format(imagename, Ex))
+            logging.error("Exception while reading {} image metadata: {}".format(imagename, Ex))
             raise # I consider this fatal since we did find relevant exif metadata
         if self.camera_maker == "DJI" or self.camera_maker == "Hasselblad":
             try:
@@ -109,10 +109,10 @@ class ImageMetadata:
                                 self.camera_pitch = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalPitchDegree'])
                                 self.camera_yaw = float(elt.attrib['{http://www.dji.com/drone-dji/1.0/}GimbalYawDegree'])
                     except KeyError as Ex:
-                        logging.warning("KeyError exception {} : {}".format(imagename, Ex))
+                        logging.error("KeyError exception {} : {}".format(imagename, Ex))
                         pass # I don't consider this fatal since we did find lat/long
             except Exception as Ex:
-                logging.warning("Exception while reading {} extended image metadata: {}".format(imagename, Ex))
+                logging.error("Exception while reading {} extended image metadata: {}".format(imagename, Ex))
                 pass # I don't consider this fatal since we did find lat/long
         elif self.camera_maker == "SONY":
             try:
@@ -276,24 +276,24 @@ class InspectImages:
             for image in img_contents:
                 imagename = os.path.join(input_folder, image)
                 
-                is_nadir = False  
+                image_is_nadir = False  
                 
                 try:
                     imagemetadata = ImageMetadata(imagename)
                     if imagemetadata.camera_pitch is not None:
                         if imagemetadata.camera_pitch < InspectImages.NADIRLIMIT:
-                                    is_nadir = True
+                                    image_is_nadir = True
                     else:
-                        pass 
+                        image_is_nadir = True # If no pitch is available, assume Nadir image 
                 except Exception as Ex:
-                    logging.fatal("No idea what happened. Do you have permission? {}".format(Ex))     
+                    logging.warning("Error reading image metadata. {}".format(Ex))     
                     continue     
-        
+                
                 if nadir_or_oblique == 'N':
-                    if is_nadir == False:
+                    if image_is_nadir == False:
                         continue
                 elif nadir_or_oblique == 'O':
-                    if is_nadir == True:
+                    if image_is_nadir == True:
                         continue
                 
                 if not(self.min_altitude < imagemetadata.camera_altitude < self.max_altitude):
@@ -301,13 +301,13 @@ class InspectImages:
                     
                 self.points.append(tuple([imagemetadata.camera_longitude, imagemetadata.camera_latitude]))
                 pnt = folder.newpoint(name="{0}".format(imagemetadata.camera_altitude), coords=[(imagemetadata.camera_longitude, imagemetadata.camera_latitude)])
-                if is_nadir == True or imagemetadata.camera_pitch is None: # If no yaw is available, assume Nadir image
+                if image_is_nadir == True or imagemetadata.camera_pitch is None: # If no yaw is available, assume Nadir image
                     pnt.style = shared_nadir_style
                 else:
                     pnt.style = style_dict[InspectImages.degrees_to_cardinals(imagemetadata.camera_yaw)] # Assign a predefined style
 
         if found_images == False:
-            logging.fatal("Couldn't find anything to process!!")
+            logging.error("Couldn't find anything to process!!")
             sys.exit(0)            
     
 def main(args):
