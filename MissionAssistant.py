@@ -257,7 +257,7 @@ class InspectImages:
             folder = self.display_kml.newfolder(name='VIMANA')
             # sharedstyle.labelstyle.color = "ff0000ff"  # Red
         except Exception as Ex:
-            logging.fatal("No idea what happened. Do you have permission? {}".format(Ex))
+            logging.critical("No idea what happened. Do you have permission? {}".format(Ex))
             exit(0)
         
         root_folder = input_folder    
@@ -275,7 +275,7 @@ class InspectImages:
                 
             for image in img_contents:
                 imagename = os.path.join(input_folder, image)
-                
+                    
                 image_is_nadir = False  
                 
                 try:
@@ -283,10 +283,15 @@ class InspectImages:
                     if imagemetadata.camera_pitch is not None:
                         if imagemetadata.camera_pitch < InspectImages.NADIRLIMIT:
                                     image_is_nadir = True
+                        logging.debug("{} : {} : {} : {}".format(imagename, 
+                                                             imagemetadata.camera_maker, 
+                                                             imagemetadata.camera_model,
+                                                             imagemetadata.camera_pitch))
                     else:
                         image_is_nadir = True # If no pitch is available, assume Nadir image 
+                        logging.warning("No pitch available for image {}".format(imagename))
                 except Exception as Ex:
-                    logging.warning("Error reading image metadata. {}".format(Ex))     
+                    logging.error("Error reading {} metadata. {}".format(imagename, Ex))     
                     continue     
                 
                 if nadir_or_oblique == 'N':
@@ -315,13 +320,13 @@ def main(args):
         image_inspector = InspectImages(args)
         
         logfile_path = os.path.join(image_inspector.output_folder, "LOGFILE.txt")
-        logging.basicConfig(level=logging.INFO, filename=logfile_path, filemode='w', 
+        logging.basicConfig(level=logging.WARNING, filename=logfile_path, filemode='w', 
                                 format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         
         if image_inspector.info_flag == True:   
-            logging.basicConfig(level=logging.INFO)
+            logging.root.setLevel(logging.INFO)
         if image_inspector.debug_flag == True:
-            logging.basicConfig(level=logging.DEBUG)
+            logging.root.setLevel(logging.DEBUG)
         
         image_inspector.process()
         outputlocation = os.path.join(image_inspector.output_folder, "Images.kml")
