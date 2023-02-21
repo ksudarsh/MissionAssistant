@@ -262,11 +262,7 @@ class InspectImages:
         
         root_folder = input_folder    
         found_images = False
-        
-        logging.info("Debug flag : {}, Info flag : {}".format(self.debug_flag, self.info_flag))
-        logging.info("Type of images required: {}".format(self.image_type))
-        logging.info("Min altitude : {}, Max altitude : {}".format(self.min_altitude, self.max_altitude))
-        
+         
         for input_folder, dir_names, filenames in os.walk(root_folder):
             img_contents = [s for s in os.listdir(input_folder) if s.endswith('.JPG') or s.endswith('.jpg')] # Only pick .JPG or .jpg
                 
@@ -322,6 +318,11 @@ def main(args):
         logfile_path = os.path.join(image_inspector.output_folder, "LOGFILE.txt")
         logging.basicConfig(level=logging.WARNING, filename=logfile_path, filemode='w', 
                                 format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        
+        logging.root.setLevel(logging.INFO)
+        for keys, values in args.items():
+            logging.info("{} : {}".format(keys, values))
+        logging.root.setLevel(logging.WARNING)
         
         if image_inspector.info_flag == True:   
             logging.root.setLevel(logging.INFO)

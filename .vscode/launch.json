@@ -14,18 +14,18 @@
                 "-t",
                 "A",
                 //"-i",
-                "-d",
+                //"-d",
                 "-a",
                 "1",
                 "8000",
                 //"Z:\\Temp\\Image Processing\\REGENERON\\2021-01-21\\DCIM\\100MEDIA",
                 //"Z:\\Temp\\Image Processing\\regeneron"
-                //"Z:\\Temp\\Image Processing\\IdeaForge\\Images",
+                "Z:\\Temp\\Image Processing\\IdeaForge\\Images",
                 //"Z:\\Temp\\Image Processing\\IdeaForge"
                 //"Z:\\Temp\\Image Processing\\Experiment\\TESTING",
                 //"Z:\\Temp\\Image Processing\\Experiment\\TESTING"
                 //"Z:\\Temp\\Image Processing\\WINGTRA",
-                "Z:\\Temp/Image Processing\\WINGTRA",
+                //"Z:\\Temp/Image Processing\\WINGTRA",
                 //"Z:\\Ubuntu\\shared\\UB\\down\\down\\WORK\\NUTLEY\\DCIM\\INSPECTION",
                 //"Z:\\Ubuntu\\shared\\UB\\down\\down\\WORK\\NUTLEY",
                 "Z:\\Temp\\Image Processing"
